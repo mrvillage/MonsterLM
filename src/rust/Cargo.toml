@@ -1,0 +1,14 @@
+[package]
+name = 'monsterlm'
+version = '0.1.0'
+edition = '2021'
+
+[lib]
+crate-type = ['staticlib']
+name = 'monsterlm'
+
+[dependencies]
+extendr-api = '*'
+lmutils = { version = "0.1", path = "../../../../lmutils" }
+rayon = "1.10.0"
+faer = "0.18.2"
