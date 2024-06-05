@@ -285,7 +285,7 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
                     let n = x.nb_indi as f64;
                     (1.0 - e_on_p)
                         * ((n - 1.0) / (n - p - 1.0)).powi(2)
-                        * R! {Variance.R2({{adj_r2}}, {{n}}, {{p}})}
+                        * R!("Variance.R2({{adj_r2}}, {{n}}, {{p}})")
                             .unwrap()
                             .as_real()
                             .unwrap()
@@ -314,7 +314,7 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
                     let n = x.nb_indi as f64;
                     (1.0 - e_on_p)
                         * ((n - 1.0) / (n - p - 1.0)).powi(2)
-                        * R! {Variance.R2({{adj_r2}}, {{n}}, {{p}})}
+                        * R!("Variance.R2({{adj_r2}}, {{n}}, {{p}})")
                             .unwrap()
                             .as_real()
                             .unwrap()
