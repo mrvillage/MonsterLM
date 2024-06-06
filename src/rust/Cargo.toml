@@ -10,6 +10,6 @@ name = 'monsterlm'
 [dependencies]
 extendr-api = '*'
 rayon = "1.10.0"
-faer = "0.18.2"
+faer = "0.19"
 # lmutils = { version = "0.1", path = "../../../../lmutils" }
 lmutils = "0.1"
