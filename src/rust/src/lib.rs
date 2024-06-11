@@ -9,23 +9,17 @@ use rayon::{
     iter::{
         IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
     },
-    slice::ParallelSliceMut,
+    slice::{ParallelSlice, ParallelSliceMut},
 };
 
 const CHROMOSOMES: u8 = 22;
-const MAX_SETS: [u8; 22] = [
-    4, 4, 4, 3, 3, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1,
-];
 
 fn remove_rows(ncols: usize, data: &[f64], indices: &HashSet<usize>) -> Vec<f64> {
-    let mut new = Vec::with_capacity(data.len() - indices.len() * ncols);
-    for (i, row) in data.chunks(ncols).enumerate() {
-        if indices.contains(&i) {
-            continue;
-        }
-        new.extend(row);
-    }
-    new
+    data.par_chunks_exact(ncols)
+        .enumerate()
+        .filter_map(|(i, x)| if indices.contains(&i) { None } else { Some(x) })
+        .flat_map(|x| x.par_iter().copied())
+        .collect::<Vec<_>>()
 }
 
 #[extendr]
@@ -165,85 +159,68 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
     let single_set_results = (1..=CHROMOSOMES)
         .into_par_iter()
         .flat_map(|chr| {
-            (1..=(MAX_SETS[chr as usize]))
-                .into_par_iter()
-                .zip(rayon::iter::repeat(chr).take(MAX_SETS[chr as usize] as usize))
-                .flat_map(|(set, chr)| {
-                    let block = lmutils::File::from_path(
-                        dir.join(format!("chr_{}_set_{}.rkyv.gz", chr, set)),
-                    )
-                    .unwrap()
-                    .read_matrix::<f64, _, _>(true)
-                    .unwrap();
-                    let ncols = block.cols();
-                    combos
-                        .par_iter()
-                        .map(
-                            |(p_resid, e_final, trait_name, exposure_name, nan_indices, e_on_p)| {
-                                let p_resid = faer::mat::from_column_major_slice::<f64>(
-                                    p_resid,
-                                    p_resid.len(),
-                                    1,
-                                );
+            let block = lmutils::File::from_path(dir.join(format!("chr_{}.rkyv.gz", chr)))
+                .unwrap()
+                .read_matrix::<f64, _, _>(true)
+                .unwrap();
+            let ncols = block.cols();
+            combos.par_iter().map(
+                move |(p_resid, e_final, trait_name, exposure_name, nan_indices, e_on_p)| {
+                    let p_resid =
+                        faer::mat::from_column_major_slice::<f64>(p_resid, p_resid.len(), 1);
 
-                                let mut block_data = remove_rows(ncols, block.data(), nan_indices);
-                                let ndata = block_data.len();
-                                let nrows = ndata / ncols;
-                                // by moving this up here, we don't need to clone block_data
-                                let mat = faer::mat::from_column_major_slice::<f64>(
-                                    &block_data,
-                                    block_data.len() / ncols,
-                                    ncols,
-                                );
-                                let g_r2 = lmutils::get_r2s(mat, p_resid)[0].adj_r2();
+                    let mut block_data = remove_rows(ncols, block.data(), nan_indices);
+                    let ndata = block_data.len();
+                    let nrows = ndata / ncols;
+                    // by moving this up here, we don't need to clone block_data
+                    let mat = faer::mat::from_column_major_slice::<f64>(
+                        &block_data,
+                        block_data.len() / ncols,
+                        ncols,
+                    );
+                    let g_r2 = lmutils::get_r2s(mat, p_resid)[0].adj_r2();
 
-                                if continuous {
-                                    block_data.par_chunks_mut(ncols).for_each(|chunk| {
-                                        chunk
-                                            .iter_mut()
-                                            .zip(e_final.iter())
-                                            .for_each(|(g, e)| *g *= e);
-                                        let c = chunk.to_vec();
-                                        c.quant_norm().zip(chunk).for_each(|(q, g)| *g = q);
-                                    });
-                                } else {
-                                    block_data.par_chunks_mut(ncols).for_each(|chunk| {
-                                        chunk
-                                            .iter_mut()
-                                            .zip(e_final.iter())
-                                            .for_each(|(g, e)| *g *= e);
-                                        lmutils::r::standardization(chunk);
-                                    });
-                                }
-                                let mat = faer::mat::from_column_major_slice::<f64>(
-                                    &block_data,
-                                    nrows,
-                                    ncols,
-                                );
-                                let gxe_r2 = lmutils::get_r2s(mat, p_resid)[0].adj_r2();
+                    if continuous {
+                        block_data.par_chunks_mut(ncols).for_each(|chunk| {
+                            chunk
+                                .iter_mut()
+                                .zip(e_final.iter())
+                                .for_each(|(g, e)| *g *= e);
+                            let c = chunk.to_vec();
+                            c.quant_norm().zip(chunk).for_each(|(q, g)| *g = q);
+                        });
+                    } else {
+                        block_data.par_chunks_mut(ncols).for_each(|chunk| {
+                            chunk
+                                .iter_mut()
+                                .zip(e_final.iter())
+                                .for_each(|(g, e)| *g *= e);
+                            lmutils::r::standardization(chunk);
+                        });
+                    }
+                    let mat = faer::mat::from_column_major_slice::<f64>(&block_data, nrows, ncols);
+                    let gxe_r2 = lmutils::get_r2s(mat, p_resid)[0].adj_r2();
 
-                                struct SingleSetResult {
-                                    pub nb_indi: usize,
-                                    pub nb_snps: usize,
-                                    pub gxe_r2: f64,
-                                    pub g_r2: f64,
-                                    pub e_on_p: f64,
-                                    pub trait_name: String,
-                                    pub exposure_name: String,
-                                }
-                                SingleSetResult {
-                                    nb_indi: ndata,
-                                    nb_snps: ncols,
-                                    gxe_r2,
-                                    g_r2,
-                                    e_on_p: *e_on_p,
-                                    trait_name: trait_name.to_string(),
-                                    exposure_name: exposure_name.to_string(),
-                                }
-                            },
-                        )
-                        .collect::<Vec<_>>()
-                })
+                    struct SingleSetResult {
+                        pub nb_indi: usize,
+                        pub nb_snps: usize,
+                        pub gxe_r2: f64,
+                        pub g_r2: f64,
+                        pub e_on_p: f64,
+                        pub trait_name: String,
+                        pub exposure_name: String,
+                    }
+                    SingleSetResult {
+                        nb_indi: ndata,
+                        nb_snps: ncols,
+                        gxe_r2,
+                        g_r2,
+                        e_on_p: *e_on_p,
+                        trait_name: trait_name.to_string(),
+                        exposure_name: exposure_name.to_string(),
+                    }
+                },
+            )
         })
         .collect::<Vec<_>>();
 
