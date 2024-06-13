@@ -25,6 +25,7 @@ fn remove_rows(ncols: usize, data: &[f64], indices: &HashSet<usize>) -> Vec<f64>
         .collect::<Vec<_>>()
 }
 
+/// @export
 #[extendr]
 fn monsterlm(dir: &str, env_type: &str) -> Robj {
     let _ = env_logger::Builder::from_env(
@@ -347,6 +348,7 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
     .into_robj()
 }
 
+/// @export
 #[extendr]
 fn plink_qc(
     plink: &str,
