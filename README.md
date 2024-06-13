@@ -10,6 +10,8 @@ Requires the [Rust programming language](https://rust-lang.org).
 
 ```r
 devtools::install_github("mrvillage/MonsterLM")
+# OR
+install.packages("https://github.com/mrvillage/monsterlm/archive/refs/heads/master.tar.gz", repos=NULL) # use .zip for Windows
 ```
 
 ## Usage
