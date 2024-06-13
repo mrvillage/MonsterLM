@@ -7,6 +7,7 @@ use std::{
 
 use extendr_api::prelude::*;
 use lmutils::r::QuantNorm;
+use log::info;
 use rayon::{
     iter::{
         IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
@@ -26,6 +27,11 @@ fn remove_rows(ncols: usize, data: &[f64], indices: &HashSet<usize>) -> Vec<f64>
 
 #[extendr]
 fn monsterlm(dir: &str, env_type: &str) -> Robj {
+    let _ = env_logger::Builder::from_env(
+        env_logger::Env::default().filter_or("MONSTERLM_LOG", "info"),
+    )
+    .try_init();
+
     if env_type != "continuous" && env_type != "dichotomous" {
         panic!("env_type must be either 'continuous' or 'dichotomous'");
     }
@@ -349,6 +355,11 @@ fn plink_qc(
     get_genotype: Function,
     maf: f64,
 ) -> Result<()> {
+    let _ = env_logger::Builder::from_env(
+        env_logger::Env::default().filter_or("MONSTERLM_LOG", "info"),
+    )
+    .try_init();
+
     let chromosomes = Mutex::new(
         (1..=CHROMOSOMES)
             .filter_map(|chr| {
@@ -374,7 +385,7 @@ fn plink_qc(
         .clamp(1, CHROMOSOMES);
     let out_dir = std::path::Path::new(out_dir);
     std::thread::scope(|s| {
-        for i in 0..chunk_size {
+        for _ in 0..chunk_size {
             s.spawn(|| loop {
                 let mut chromosomes = chromosomes.lock().unwrap();
                 let chromosome = chromosomes.pop();
@@ -383,6 +394,7 @@ fn plink_qc(
                     // SNP quality control
                     // Hardy-Weinberg equilibrium: 1e-10
                     // genotype missingness: 0.05
+                    info!("{} SNP.1", chr);
                     let status = Command::new(plink)
                         .args([
                             "--noweb",
@@ -403,6 +415,7 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
+                    info!("{} SNP.2", chr);
                     let status = Command::new(plink)
                         .args([
                             "--noweb",
@@ -426,8 +439,10 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
+                    info!("{} SNP done", chr);
 
                     // LD pruning
+                    info!("{} LD.1", chr);
                     let status = Command::new(plink)
                         .args([
                             "--noweb",
@@ -449,6 +464,7 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
+                    info!("{} LD.2", chr);
                     let status = Command::new(plink)
                         .args([
                             "--noweb",
@@ -475,8 +491,10 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
+                    info!("{} LD done", chr);
 
                     // Recode to additive model (0, 1, 2)
+                    info!("{} additive model", chr);
                     let status = Command::new(plink)
                         .args([
                             "--noweb",
@@ -499,12 +517,14 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
+                    info!("{} additive model done", chr);
 
                     // Clear out the intermediate files
                     // out_dir/*log
                     // out_dir/*frq
                     // out_dir/*prune*
                     // out_dir/*snplist
+                    info!("{} cleaning", chr);
                     fn clear_dir(dir: &std::path::Path) {
                         let log_regex = regex::Regex::new(r".*log").unwrap();
                         let frq_regex = regex::Regex::new(r".*frq").unwrap();
@@ -524,6 +544,7 @@ fn plink_qc(
                         }
                     }
                     clear_dir(out_dir);
+                    info!("{} cleaning done", chr);
                 } else {
                     break;
                 }

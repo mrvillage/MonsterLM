@@ -15,3 +15,5 @@ faer = "0.19"
 # lmutils = "0.1"
 lmutils = { version = "0.1", git = "https://github.com/mrvillage/lmutils" }
 regex = "1.10.5"
+log = "0.4.21"
+env_logger = "0.11.3"
