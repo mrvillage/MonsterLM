@@ -351,8 +351,8 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
 fn plink_qc(
     plink: &str,
     out_dir: &str,
-    get_allele: Function,
     get_genotype: Function,
+    get_allele: Function,
     maf: f64,
 ) -> Result<()> {
     let _ = env_logger::Builder::from_env(
