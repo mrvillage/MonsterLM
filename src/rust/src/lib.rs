@@ -1,6 +1,8 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
+    process::Command,
+    sync::Mutex,
 };
 
 use extendr_api::prelude::*;
@@ -339,10 +341,203 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
     .into_robj()
 }
 
+#[extendr]
+fn plink_qc(
+    plink: &str,
+    out_dir: &str,
+    get_allele: Function,
+    get_genotype: Function,
+    maf: f64,
+) -> Result<()> {
+    let chromosomes = Mutex::new(
+        (1..=CHROMOSOMES)
+            .filter_map(|chr| {
+                let file = get_genotype.call(pairlist!(chr = chr)).unwrap();
+                let allele = get_allele.call(pairlist!(chr = chr)).unwrap();
+                if file.is_null() || allele.is_null() {
+                    None
+                } else {
+                    Some((
+                        chr,
+                        file.as_str().unwrap().to_string(),
+                        allele.as_str().unwrap().to_string(),
+                    ))
+                }
+            })
+            .collect::<Vec<_>>(),
+    );
+    std::fs::create_dir_all(out_dir).unwrap();
+    let chunk_size = std::env::var("MONSTERLM_CHROMOSOME_CHUNK_SIZE")
+        .unwrap_or("4".to_string())
+        .parse::<u8>()
+        .unwrap()
+        .clamp(1, CHROMOSOMES);
+    let out_dir = std::path::Path::new(out_dir);
+    std::thread::scope(|s| {
+        for i in 0..chunk_size {
+            s.spawn(|| loop {
+                let mut chromosomes = chromosomes.lock().unwrap();
+                let chromosome = chromosomes.pop();
+                drop(chromosomes);
+                if let Some((chr, file, allele)) = chromosome {
+                    // SNP quality control
+                    // Hardy-Weinberg equilibrium: 1e-10
+                    // genotype missingness: 0.05
+                    let status = Command::new(plink)
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            &file,
+                            "--maf",
+                            &maf.to_string(),
+                            "--geno",
+                            "0.05",
+                            "--hwe",
+                            "1e-10",
+                            "--write-snplist",
+                            "--out",
+                            out_dir.join(&format!("chr.{}", chr)).to_str().unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+                    let status = Command::new(plink)
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            &file,
+                            "--keep-allele-order",
+                            "--extract",
+                            out_dir
+                                .join(&format!("chr.{}.snplist", chr))
+                                .to_str()
+                                .unwrap(),
+                            "--make-bed",
+                            "--out",
+                            out_dir
+                                .join(&format!("chr.{}.final", chr))
+                                .to_str()
+                                .unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+
+                    // LD pruning
+                    let status = Command::new(plink)
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            out_dir
+                                .join(&format!("chr.{}.final", chr))
+                                .to_str()
+                                .unwrap(),
+                            "--keep-allele-order",
+                            "--indep-pairwise",
+                            "1000",
+                            "500",
+                            "0.9",
+                            "--out",
+                            out_dir.join(&format!("chr.{}", chr)).to_str().unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+                    let status = Command::new(plink)
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            out_dir
+                                .join(&format!("chr.{}.final", chr))
+                                .to_str()
+                                .unwrap(),
+                            "--keep-allele-order",
+                            "--extract",
+                            out_dir
+                                .join(&format!("chr.{}.prune.in", chr))
+                                .to_str()
+                                .unwrap(),
+                            "--make-bed",
+                            "--out",
+                            out_dir
+                                .join(&format!("chr.{}.monsterlm", chr))
+                                .to_str()
+                                .unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+
+                    // Recode to additive model (0, 1, 2)
+                    let status = Command::new(plink)
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            out_dir
+                                .join(&format!("chr.{}.monsterlm", chr))
+                                .to_str()
+                                .unwrap(),
+                            "--recodeA",
+                            "--recode-allele",
+                            &allele,
+                            "--out",
+                            out_dir
+                                .join(&format!("chr.{}.monsterlm_additive", chr))
+                                .to_str()
+                                .unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+
+                    // Clear out the intermediate files
+                    // out_dir/*log
+                    // out_dir/*frq
+                    // out_dir/*prune*
+                    // out_dir/*snplist
+                    fn clear_dir(dir: &std::path::Path) {
+                        let log_regex = regex::Regex::new(r".*log").unwrap();
+                        let frq_regex = regex::Regex::new(r".*frq").unwrap();
+                        let prune_regex = regex::Regex::new(r".*prune.*").unwrap();
+                        for entry in std::fs::read_dir(dir).unwrap() {
+                            let entry = entry.unwrap();
+                            let path = entry.path();
+                            let s = path.to_str().unwrap();
+                            if path.is_dir() {
+                                clear_dir(&path);
+                            } else if log_regex.is_match(s)
+                                || frq_regex.is_match(s)
+                                || prune_regex.is_match(s)
+                            {
+                                std::fs::remove_file(&path).unwrap();
+                            }
+                        }
+                    }
+                    clear_dir(out_dir);
+                } else {
+                    break;
+                }
+            });
+        }
+    });
+    Ok(())
+}
+
 // Macro to generate exports.
 // This ensures exported functions are registered with R.
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod monsterlm;
     fn monsterlm;
+    fn plink_qc;
 }
