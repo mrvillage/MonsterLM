@@ -365,6 +365,7 @@ fn plink_qc(
     let chromosomes = Mutex::new(
         (1..=CHROMOSOMES)
             .filter_map(|chr| {
+                let chr = chr as i32;
                 let file = get_genotype.call(pairlist!(chr = chr)).unwrap();
                 let allele = get_allele.call(pairlist!(chr = chr)).unwrap();
                 if file.is_null() || allele.is_null() {
