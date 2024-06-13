@@ -348,6 +348,12 @@ fn monsterlm(dir: &str, env_type: &str) -> Robj {
     .into_robj()
 }
 
+/// Run the PLINK quality control for MonsterLM
+/// `plink` is the path to the plink executable.
+/// `out_dir` is the output directory.
+/// `get_genotype` is a function that takes a chromosome number (`chr`) and returns the genotype file.
+/// `get_allele` is a function that takes a chromosome number (`chr`) and returns the allele file.
+/// `maf` is the minor allele frequency threshold.
 /// @export
 #[extendr]
 fn plink_qc(
