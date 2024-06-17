@@ -412,15 +412,12 @@ fn plink_qc(
                             "--noweb",
                             "--bfile",
                             &file,
-                            "--maf",
-                            &maf.to_string(),
                             "--geno",
                             "0.05",
                             "--hwe",
                             "1e-10",
-                            "--write-snplist",
                             "--out",
-                            out_dir.join(&format!("chr.{}", chr)).to_str().unwrap(),
+                            out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
                         ])
                         .status()
                         .unwrap();
@@ -428,6 +425,71 @@ fn plink_qc(
                         panic!("Failed to run plink");
                     }
                     info!("{} SNP.2", chr);
+                    let snps = std::fs::read_to_string(
+                        out_dir.join(&format!("tmp.{}.bim", chr)).to_str().unwrap(),
+                    )
+                    .unwrap();
+                    let snps = snps
+                        .lines()
+                        .map(|x| x.split_whitespace().nth(1).unwrap().to_string())
+                        .collect::<Vec<_>>();
+                    let mut seen = HashSet::new();
+                    let mut duplicates = HashSet::new();
+                    for snp in snps {
+                        if seen.contains(&snp) {
+                            duplicates.insert(snp);
+                        } else {
+                            seen.insert(snp);
+                        }
+                    }
+                    std::fs::write(
+                        out_dir.join(&format!("tmp.{}.dup", chr)),
+                        duplicates
+                            .into_iter()
+                            .map(|x| format!("{}\n", x))
+                            .collect::<Vec<_>>()
+                            .concat(),
+                    )
+                    .unwrap();
+                    info!("{} SNP.3", chr);
+                    let status = Command::new(plink)
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
+                            "--exclude",
+                            out_dir.join(&format!("tmp.{}.dup", chr)).to_str().unwrap(),
+                            "--make-bed",
+                            "--out",
+                            out_dir.join(&format!("tmp.{}.qc", chr)).to_str().unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+                    info!("{} SNP.4", chr);
+                    let status = Command::new(plink)
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .args([
+                            "--noweb",
+                            "--bfile",
+                            out_dir.join(&format!("tmp.{}.qc", chr)).to_str().unwrap(),
+                            "--maf",
+                            &maf.to_string(),
+                            "--write-snplist",
+                            "--out",
+                            out_dir.join(&format!("tmp.{}.maf", chr)).to_str().unwrap(),
+                        ])
+                        .status()
+                        .unwrap();
+                    if status.code().unwrap() != 0 {
+                        panic!("Failed to run plink");
+                    }
+                    info!("{} SNP done", chr);
                     let status = Command::new(plink)
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
@@ -438,13 +500,13 @@ fn plink_qc(
                             "--keep-allele-order",
                             "--extract",
                             out_dir
-                                .join(&format!("chr.{}.snplist", chr))
+                                .join(&format!("tmp.{}.maf.snplist", chr))
                                 .to_str()
                                 .unwrap(),
                             "--make-bed",
                             "--out",
                             out_dir
-                                .join(&format!("chr.{}.final", chr))
+                                .join(&format!("tmp.{}.final", chr))
                                 .to_str()
                                 .unwrap(),
                         ])
@@ -464,7 +526,7 @@ fn plink_qc(
                             "--noweb",
                             "--bfile",
                             out_dir
-                                .join(&format!("chr.{}.final", chr))
+                                .join(&format!("tmp.{}.final", chr))
                                 .to_str()
                                 .unwrap(),
                             "--keep-allele-order",
@@ -473,7 +535,7 @@ fn plink_qc(
                             "500",
                             "0.9",
                             "--out",
-                            out_dir.join(&format!("chr.{}", chr)).to_str().unwrap(),
+                            out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
                         ])
                         .status()
                         .unwrap();
@@ -488,19 +550,19 @@ fn plink_qc(
                             "--noweb",
                             "--bfile",
                             out_dir
-                                .join(&format!("chr.{}.final", chr))
+                                .join(&format!("tmp.{}.final", chr))
                                 .to_str()
                                 .unwrap(),
                             "--keep-allele-order",
                             "--extract",
                             out_dir
-                                .join(&format!("chr.{}.prune.in", chr))
+                                .join(&format!("tmp.{}.prune.in", chr))
                                 .to_str()
                                 .unwrap(),
                             "--make-bed",
                             "--out",
                             out_dir
-                                .join(&format!("chr.{}.monsterlm", chr))
+                                .join(&format!("tmp.{}.monsterlm", chr))
                                 .to_str()
                                 .unwrap(),
                         ])
@@ -520,17 +582,14 @@ fn plink_qc(
                             "--noweb",
                             "--bfile",
                             out_dir
-                                .join(&format!("chr.{}.monsterlm", chr))
+                                .join(&format!("tmp.{}.monsterlm", chr))
                                 .to_str()
                                 .unwrap(),
                             "--recodeA",
                             "--recode-allele",
                             &allele,
                             "--out",
-                            out_dir
-                                .join(&format!("chr.{}.monsterlm_additive", chr))
-                                .to_str()
-                                .unwrap(),
+                            out_dir.join(&format!("chr.{}", chr)).to_str().unwrap(),
                         ])
                         .status()
                         .unwrap();
@@ -549,6 +608,7 @@ fn plink_qc(
                         let log_regex = regex::Regex::new(r".*log").unwrap();
                         let frq_regex = regex::Regex::new(r".*frq").unwrap();
                         let prune_regex = regex::Regex::new(r".*prune.*").unwrap();
+                        let tmp_regex = regex::Regex::new(r"tmp.*").unwrap();
                         for entry in std::fs::read_dir(dir).unwrap() {
                             let entry = entry.unwrap();
                             let path = entry.path();
@@ -558,6 +618,7 @@ fn plink_qc(
                             } else if log_regex.is_match(s)
                                 || frq_regex.is_match(s)
                                 || prune_regex.is_match(s)
+                                || tmp_regex.is_match(s)
                             {
                                 std::fs::remove_file(&path).unwrap();
                             }
