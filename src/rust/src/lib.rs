@@ -400,6 +400,7 @@ fn plink_qc(
                 let chromosome = chromosomes.pop();
                 drop(chromosomes);
                 if let Some((chr, file, allele)) = chromosome {
+                    info!("{} start using file {} and allele {}", chr, file, allele);
                     // SNP quality control
                     // Hardy-Weinberg equilibrium: 1e-10
                     // genotype missingness: 0.05
