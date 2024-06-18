@@ -416,6 +416,7 @@ fn plink_qc(
                             "0.05",
                             "--hwe",
                             "1e-10",
+                            "--make-bed",
                             "--out",
                             out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
                         ])
