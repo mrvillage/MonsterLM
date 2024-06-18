@@ -454,8 +454,8 @@ fn plink_qc(
                     .unwrap();
                     info!("{} SNP.3", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
@@ -473,8 +473,8 @@ fn plink_qc(
                     }
                     info!("{} SNP.4", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
@@ -492,8 +492,8 @@ fn plink_qc(
                     }
                     info!("{} SNP.5", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
@@ -521,8 +521,8 @@ fn plink_qc(
                     // LD pruning
                     info!("{} LD.1", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
@@ -545,8 +545,8 @@ fn plink_qc(
                     }
                     info!("{} LD.2", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
@@ -577,8 +577,8 @@ fn plink_qc(
                     // Recode to additive model (0, 1, 2)
                     info!("{} additive model", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
