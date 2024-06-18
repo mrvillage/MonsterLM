@@ -489,7 +489,7 @@ fn plink_qc(
                     if status.code().unwrap() != 0 {
                         panic!("Failed to run plink");
                     }
-                    info!("{} SNP done", chr);
+                    info!("{} SNP.5", chr);
                     let status = Command::new(plink)
                         .stdout(std::process::Stdio::null())
                         .stderr(std::process::Stdio::null())
