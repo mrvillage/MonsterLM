@@ -406,8 +406,8 @@ fn plink_qc(
                     // genotype missingness: 0.05
                     info!("{} SNP.1", chr);
                     let status = Command::new(plink)
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
+                        // .stdout(std::process::Stdio::null())
+                        // .stderr(std::process::Stdio::null())
                         .args([
                             "--noweb",
                             "--bfile",
