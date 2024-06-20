@@ -416,7 +416,9 @@ fn plink_qc(
                             "0.05",
                             "--hwe",
                             "1e-10",
-                            "--make-bed",
+                            "--maf",
+                            &maf.to_string(),
+                            "--write-snplist",
                             "--out",
                             out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
                         ])
@@ -427,26 +429,19 @@ fn plink_qc(
                     }
                     info!("{} SNP.2", chr);
                     let snps = std::fs::read_to_string(
-                        out_dir.join(&format!("tmp.{}.bim", chr)).to_str().unwrap(),
+                        out_dir
+                            .join(&format!("tmp.{}.snplist", chr))
+                            .to_str()
+                            .unwrap(),
                     )
                     .unwrap();
                     let snps = snps
                         .lines()
-                        .map(|x| x.split_whitespace().nth(1).unwrap().to_string())
-                        .collect::<Vec<_>>();
-                    let mut seen = HashSet::new();
-                    let mut duplicates = HashSet::new();
-                    for snp in snps {
-                        if seen.contains(&snp) {
-                            duplicates.insert(snp);
-                        } else {
-                            seen.insert(snp);
-                        }
-                    }
+                        .map(|x| x.split_whitespace().next().unwrap().to_string())
+                        .collect::<HashSet<_>>();
                     std::fs::write(
-                        out_dir.join(&format!("tmp.{}.dup", chr)),
-                        duplicates
-                            .into_iter()
+                        out_dir.join(&format!("tmp.{}.unique_snplist", chr)),
+                        snps.into_iter()
                             .map(|x| format!("{}\n", x))
                             .collect::<Vec<_>>()
                             .concat(),
@@ -459,49 +454,11 @@ fn plink_qc(
                         .args([
                             "--noweb",
                             "--bfile",
-                            out_dir.join(&format!("tmp.{}", chr)).to_str().unwrap(),
-                            "--exclude",
-                            out_dir.join(&format!("tmp.{}.dup", chr)).to_str().unwrap(),
-                            "--make-bed",
-                            "--out",
-                            out_dir.join(&format!("tmp.{}.qc", chr)).to_str().unwrap(),
-                        ])
-                        .status()
-                        .unwrap();
-                    if status.code().unwrap() != 0 {
-                        panic!("Failed to run plink");
-                    }
-                    info!("{} SNP.4", chr);
-                    let status = Command::new(plink)
-                        // .stdout(std::process::Stdio::null())
-                        // .stderr(std::process::Stdio::null())
-                        .args([
-                            "--noweb",
-                            "--bfile",
-                            out_dir.join(&format!("tmp.{}.qc", chr)).to_str().unwrap(),
-                            "--maf",
-                            &maf.to_string(),
-                            "--write-snplist",
-                            "--out",
-                            out_dir.join(&format!("tmp.{}.maf", chr)).to_str().unwrap(),
-                        ])
-                        .status()
-                        .unwrap();
-                    if status.code().unwrap() != 0 {
-                        panic!("Failed to run plink");
-                    }
-                    info!("{} SNP.5", chr);
-                    let status = Command::new(plink)
-                        // .stdout(std::process::Stdio::null())
-                        // .stderr(std::process::Stdio::null())
-                        .args([
-                            "--noweb",
-                            "--bfile",
                             &file,
                             "--keep-allele-order",
                             "--extract",
                             out_dir
-                                .join(&format!("tmp.{}.maf.snplist", chr))
+                                .join(&format!("tmp.{}.unique_snplist", chr))
                                 .to_str()
                                 .unwrap(),
                             "--make-bed",
